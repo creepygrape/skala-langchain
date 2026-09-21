@@ -88,3 +88,22 @@
 - `docs/architecture.md` Embedding / Chroma 설정
 - `backend/app/rag/vector_store.py` Vector Store 관리
 - `backend/requirements.txt` LangChain OpenAI / Chroma 통합 패키지
+
+### 2026-09-21 — Retriever 검색 설정 확정
+
+**기존**
+- Retriever의 초기 `Top-K` 후보: 4~6
+- 실제 공지를 이용한 검증 후 최종값 결정 예정
+
+**변경**
+- Chroma 유사도 검색 사용
+- `Top-K`: 5
+- 모든 검색에 현재 URL의 `concert_id` metadata filter 적용
+
+**이유**
+- `26012624` 공연의 21개 Chunk를 대상으로 세 가지 비교 질문을 검색한 결과, 팬클럽 인증·선예매, 현장수령·본인확인, 배송 일정에 해당하는 서로 다른 관련 Chunk가 Top-5 안에 검색됨
+- 여러 공연을 같은 Vector Store에 저장한 테스트에서 요청한 `concert_id` 이외의 Chunk가 반환되지 않음을 확인함
+
+**영향**
+- `docs/architecture.md` Retriever 설정
+- `backend/app/rag/vector_store.py` 공연별 Retriever 생성 및 검색 로직

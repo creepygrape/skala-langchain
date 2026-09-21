@@ -627,13 +627,15 @@ Query Understanding이 불필요한 LLM 호출을 발생시키는 경우에는 �
 
 검색 시 `concert_id`로 필터링하여 사용자가 입력한 공연의 Document만 대상으로 한다.
 
-초기값:
+MVP 설정:
 
 ```text
-Top-K: 4~6
+Search: similarity
+Top-K: 5
+Filter: concert_id
 ```
 
-최종 값은 테스트 후 결정한다.
+`26012624` 공연의 21개 Chunk를 대상으로 팬클럽 선예매, 일반예매 후 현장수령 준비물, 배송 및 현장수령 일정 질문을 비교한 결과, 각 질문에서 서로 다른 관련 Chunk가 Top-5 안에 검색됐다.
 
 ---
 

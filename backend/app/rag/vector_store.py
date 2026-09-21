@@ -6,6 +6,7 @@ import chromadb
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
+from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_openai import OpenAIEmbeddings
 
 
@@ -14,6 +15,7 @@ class VectorStoreService:
 
     DEFAULT_COLLECTION_NAME = "concert_ticket_guide"
     DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+    DEFAULT_TOP_K = 5
 
     def __init__(
         self,
@@ -72,3 +74,31 @@ class VectorStoreService:
         ]
         self._vector_store.add_documents(concert_documents)
         return True
+
+    def get_retriever(
+        self,
+        concert_id: str,
+        *,
+        top_k: int = DEFAULT_TOP_K,
+    ) -> VectorStoreRetriever:
+        """Return a similarity retriever restricted to one concert."""
+        if top_k < 1:
+            raise ValueError("top_k는 1 이상이어야 합니다.")
+
+        return self._vector_store.as_retriever(
+            search_type="similarity",
+            search_kwargs={
+                "k": top_k,
+                "filter": {"concert_id": concert_id},
+            },
+        )
+
+    def retrieve(
+        self,
+        concert_id: str,
+        query: str,
+        *,
+        top_k: int = DEFAULT_TOP_K,
+    ) -> list[Document]:
+        """Retrieve question-relevant chunks for the requested concert."""
+        return self.get_retriever(concert_id, top_k=top_k).invoke(query)
