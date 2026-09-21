@@ -26,8 +26,8 @@
 | LLM | OpenAI Chat Model | 질문 해석 및 최종 답변 생성 |
 | Embedding | OpenAI Embedding | 문서와 질문을 Vector로 변환 |
 | Vector Store | Chroma | 예매 공지 Vector 저장 및 의미 기반 검색 |
-| OCR | PaddleOCR | 상세 공지 이미지의 텍스트 추출 |
-| HTML Parsing | BeautifulSoup / LangChain Loader | NOL Ticket 페이지 텍스트 및 이미지 URL 추출 |
+| OCR | PaddleOCR (PP-OCRv5, Korean) | 상세 공지 이미지의 한국어 텍스트 추출 |
+| HTML Parsing | requests + BeautifulSoup | NOL Ticket HTML 텍스트 및 상세 이미지 URL 추출 |
 
 ---
 
@@ -110,7 +110,7 @@
 
 ```text
 URL:
-https://nol.yanolja.com/ticket/products/26012479
+https://nol.yanolja.com/ticket/products/26012624
 
 질문:
 팬클럽 선예매인데 현장수령이면 뭐 준비해야 해?
@@ -205,7 +205,7 @@ MVP에서는 사용자 관점의 API를 하나로 단순화한다.
 
 ```json
 {
-  "url": "https://nol.yanolja.com/ticket/products/26012479",
+  "url": "https://nol.yanolja.com/ticket/products/26012624",
   "question": "팬클럽 선예매인데 현장수령이면 뭐 준비해야 해?"
 }
 ```
@@ -325,7 +325,7 @@ HTML Document   Image Document
 지원 예:
 
 ```text
-https://nol.yanolja.com/ticket/products/26012479
+https://nol.yanolja.com/ticket/products/26012624
 ```
 
 검증 항목:
@@ -340,7 +340,7 @@ https://nol.yanolja.com/ticket/products/26012479
 예:
 
 ```text
-26012479
+26012624
 ```
 
 ---
@@ -364,15 +364,17 @@ NOL Ticket 상품 페이지에서 HTML 텍스트를 수집한다.
 
 ### 구현 방법
 
-1차 구현:
+기술 검증 결과 NOL Ticket 상품 페이지는 브라우저 자동화 없이 일반 HTTP 요청으로 필요한 정보를 수집할 수 있었다.
+
+MVP에서는 다음 구성을 사용한다.
 
 ```text
-HTTP Request
+requests
 +
 BeautifulSoup
 ```
 
-필요할 경우 LangChain의 Web Document Loader를 함께 사용한다.
+HTML에서 공연 기본 정보와 상세 공지 이미지 URL을 추출한다.
 
 ---
 
@@ -410,7 +412,53 @@ PaddleOCR 선정 이유:
 - 별도의 OCR API 호출 비용 없음
 - 한국어 텍스트 처리 가능
 
-OCR 품질이 부족한 경우 Vision LLM 적용을 향후 개선 방향으로 둔다.
+### 9.1 OCR 설정
+
+MVP에서는 다음 설정을 사용한다.
+
+```python
+PaddleOCR(
+    lang="korean",
+    ocr_version="PP-OCRv5",
+    use_doc_orientation_classify=False,
+    use_doc_unwarping=False,
+    use_textline_orientation=False,
+)
+```
+
+기술 검증에서 한국어 모델을 지정하지 않은 경우 영어와 숫자는 일부 인식되었으나 한국어 본문 인식률이 매우 낮았다.
+
+`lang="korean"`과 `PP-OCRv5`를 적용한 뒤 팬클럽 인증, 선예매, 일반예매, 본인확인, 배송, 현장수령 등 핵심 정보를 추출할 수 있었다.
+
+OCR 품질이 부족한 경우 이미지 분할·확대 또는 Vision LLM 적용을 향후 개선 방향으로 둔다.
+
+### 9.2 데이터 신뢰 우선순위
+
+HTML과 상세 이미지 OCR에 동일한 정보가 존재할 수 있다.
+
+중복 정보가 존재하는 경우 다음 우선순위를 적용한다.
+
+```text
+HTML
+↓
+OCR
+```
+
+HTML은 OCR 과정의 문자 인식 오류가 없으므로 동일 정보에 대해서는 HTML 원문을 우선한다.
+
+OCR은 HTML에 존재하지 않는 상세 공지를 보완한다.
+
+OCR 결과에는 다음과 같은 오류가 발생할 수 있다.
+
+```text
+NOL → N이L / N으L
+ID → 1D
+숫자 및 띄어쓰기 일부 오인식
+```
+
+따라서 날짜, 시간, 가격 등의 값을 애플리케이션에서 임의로 보정하지 않는다.
+
+각 Document에는 원문과 출처 metadata를 함께 보존하며, 최종 답변 생성 시 Retriever가 가져온 원문 Context를 LLM에 전달한다.
 
 ---
 
@@ -424,7 +472,7 @@ HTML과 OCR 결과는 모두 LangChain `Document` 형태로 통일한다.
 Document(
     page_content="팬클럽 선예매는 ...",
     metadata={
-        "concert_id": "26012479",
+        "concert_id": "26012624",
         "source_type": "image",
         "source_url": "...",
         "section": "presale"
@@ -493,7 +541,7 @@ Embedding된 콘서트 공지 Chunk를 저장하고 검색한다.
 예:
 
 ```text
-concert_id = 26012479
+concert_id = 26012624
 ```
 
 질문 시 해당 공연의 Chunk만 대상으로 Retrieval한다.
@@ -781,7 +829,9 @@ skala-langchain/
 │
 ├── docs/
 │   ├── requirements.md
-│   └── architecture.md
+│   ├── architecture.md
+│   ├── technical-validation.md
+│   └── tasks.md
 │
 ├── frontend/
 │   ├── src/
