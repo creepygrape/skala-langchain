@@ -67,7 +67,7 @@ MVP에서는 **NOL Ticket의 콘서트 상품 상세 페이지**만 지원한다
 
 예시 URL:
 
-https://nol.yanolja.com/ticket/products/26012479
+https://nol.yanolja.com/ticket/products/26012624
 
 다른 예매 사이트를 범용적으로 지원하지 않는다.
 
@@ -220,7 +220,13 @@ HTML에서 가져온 텍스트와 이미지에서 추출한 텍스트를 하나�
 
 목적은 전체 예매 공지를 매번 LLM에게 전달하지 않고, 사용자 질문과 관련 있는 내용만 검색하는 것이다.
 
-MVP에서는 하나의 공연 페이지에 대한 Document만 관리하면 되며 영구 저장은 필수가 아니다.
+MVP에서는 NOL Ticket 상품 ID를 공연 식별자인 `concert_id`로 사용한다.
+
+Vector Store에 여러 공연의 Document가 존재할 수 있으며, 질문 처리 시 사용자가 입력한 URL의 `concert_id`에 해당하는 Document만 검색한다.
+
+이미 분석한 공연 URL이 다시 입력된 경우 기존 Vector Store 데이터를 재사용하여 HTML 수집, OCR, Embedding을 반복하지 않는다.
+
+MVP에서 Vector Store의 영구 저장은 필수가 아니다.
 
 ---
 
