@@ -107,3 +107,39 @@
 **영향**
 - `docs/architecture.md` Retriever 설정
 - `backend/app/rag/vector_store.py` 공연별 Retriever 생성 및 검색 로직
+
+### 2026-09-21 — 구현 순서 문서 단일화
+
+**기존**
+- `docs/tasks.md`와 `docs/architecture.md`가 서로 다른 Phase 번호로 구현 순서를 중복 관리함
+
+**변경**
+- 구현 순서는 `docs/tasks.md`에서만 관리
+- `docs/architecture.md`의 중복된 구현 순서 절 제거
+
+**이유**
+- 서로 다른 Phase 번호로 인해 현재 구현 단계가 혼동됨
+
+**영향**
+- `docs/architecture.md` 이후 절 번호 조정
+
+### 2026-09-21 — Query Understanding 실행 전략 확정
+
+**기존**
+- 복합 질문의 조건을 구조화하되 단순 질문에서는 생략 가능
+- 구체적인 생략 기준과 Chat 모델은 미정
+
+**변경**
+- 서로 다른 정보 주제가 두 개 이상 포함된 질문만 Query Understanding 실행
+- 단일 주제 질문은 LLM 호출 없이 원문 질문을 검색어로 사용
+- 복합 질문은 원문과 구조화된 검색 핵심어를 결합
+- Structured Output 모델: `gpt-4o-mini`
+
+**이유**
+- 단일 주제 질문은 원문만으로 관련 Chunk 검색이 가능해 추가 LLM 호출이 불필요함
+- 복합 질문은 예매 유형, 수령 방식, 필요한 주제를 명시해 검색 범위를 보완할 수 있음
+- OpenAI 공식 문서에서 `gpt-4o-mini`는 집중된 작업에 적합한 소형 모델이며 Structured Output을 지원함
+
+**영향**
+- `docs/architecture.md` Query Understanding 설정
+- `backend/app/rag/query_analyzer.py` 질문 분석 및 검색어 생성 로직

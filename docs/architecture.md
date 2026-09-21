@@ -619,6 +619,10 @@ Structured Output
 
 Query Understanding이 불필요한 LLM 호출을 발생시키는 경우에는 생략할 수 있도록 한다.
 
+MVP에서는 질문에 서로 다른 정보 주제가 두 개 이상 포함된 경우에만 Query Understanding을 실행한다. 단일 주제 질문은 원문을 그대로 검색하며, 복합 질문은 원문과 구조화된 검색 핵심어를 함께 사용한다.
+
+Query Understanding에는 OpenAI `gpt-4o-mini`의 Structured Output을 사용한다.
+
 ---
 
 ## 15. Retriever
@@ -1013,60 +1017,7 @@ LLM에게 빈 Context를 보내 임의 답변을 생성하지 않는다.
 
 ---
 
-## 25. 구현 순서
-
-### Phase 1. HTML 기반 기본 RAG
-
-```text
-URL + Question
-→ HTML
-→ Document
-→ Split
-→ Embedding
-→ Chroma
-→ Retriever
-→ LLM
-```
-
-### Phase 2. 공연별 재사용
-
-```text
-concert_id
-→ 기존 Vector Index 확인
-→ 있으면 재사용
-```
-
-### Phase 3. Structured Output
-
-```text
-LLM
-→ TicketGuideResponse
-```
-
-### Phase 4. OCR 추가
-
-```text
-상세 이미지
-→ PaddleOCR
-→ Document
-→ 기존 RAG에 추가
-```
-
-### Phase 5. Query Understanding Chain
-
-복합 질문에 대한 Retrieval 품질을 개선한다.
-
-### Phase 6. FastAPI
-
-`POST /api/guide` 구현.
-
-### Phase 7. Vue
-
-URL + 질문을 한 화면에서 입력하고 결과를 표시한다.
-
----
-
-## 26. LangChain 컴포넌트 사용 이유
+## 25. LangChain 컴포넌트 사용 이유
 
 | Component | 역할 | 사용 이유 | 없을 경우 |
 |---|---|---|---|
@@ -1082,7 +1033,7 @@ URL + 질문을 한 화면에서 입력하고 결과를 표시한다.
 
 ---
 
-## 27. 최종 처리 구조
+## 26. 최종 처리 구조
 
 ```text
                     [사용자 입력]
@@ -1136,7 +1087,7 @@ URL + 질문을 한 화면에서 입력하고 결과를 표시한다.
 
 ---
 
-## 28. 핵심 아키텍처 목표
+## 27. 핵심 아키텍처 목표
 
 본 프로젝트는 사용자에게 복잡한 내부 절차를 노출하지 않는다.
 
