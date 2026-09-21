@@ -20,6 +20,7 @@ class TicketGuideChain:
 
     DEFAULT_MODEL = "gpt-4o-mini"
     NO_CONTEXT_MESSAGE = "예매 페이지에서 질문과 관련된 정보를 확인하지 못했습니다."
+    NOT_FOUND_MESSAGE = "예매 페이지에서 확인할 수 없습니다."
     _PROMPT = ChatPromptTemplate.from_messages(
         [
             (
@@ -28,10 +29,11 @@ class TicketGuideChain:
 
 반드시 다음 규칙을 지켜라.
 - REFERENCE DOCUMENTS만 공연 예매 정보의 근거로 사용한다.
-- 문서에 없는 정보는 추측하지 말고 "예매 페이지에서 확인할 수 없습니다."라고 답한다.
+- 질문에 직접 답하는 정보가 문서에 없으면 summary를 정확히 "예매 페이지에서 확인할 수 없습니다."로 작성하고 schedule, requirements, ticket_info, warnings, sources는 빈 목록으로 둔다.
 - 날짜, 시간, 가격, 정책과 OCR 문자를 임의로 수정하거나 보정하지 않는다.
-- HTML과 OCR 내용이 충돌하면 source_type이 html인 문서를 우선한다.
-- 사용자 질문 및 조건과 직접 관련 없는 정보는 최소화한다.
+- AUTHORITATIVE HTML DOCUMENTS와 OCR 문서의 같은 주제 값이 다르면 HTML 값만 사용하고 OCR 값은 답변에서 제외한다.
+- SUPPLEMENTAL OCR DOCUMENTS는 HTML 문서에 없는 정보를 보완할 때만 사용한다.
+- 각 출력 목록에는 사용자 질문 및 조건에 직접 답하는 정보만 넣고, 관련 없는 공연 일정·가격·정책은 넣지 않는다.
 - 중요한 제한사항과 준비사항은 생략하지 않는다.
 - 예매 성공을 보장하지 않는다.
 - sources에는 답변 작성에 실제 사용한 문서의 source_url만 넣는다.""",
@@ -89,14 +91,32 @@ class TicketGuideChain:
             try:
                 result = chain.invoke(chain_input)
                 if isinstance(result, TicketGuideResponse):
-                    return result
-                return TicketGuideResponse.model_validate(result)
+                    return self._normalize_not_found(result)
+                return self._normalize_not_found(
+                    TicketGuideResponse.model_validate(result)
+                )
             except Exception as error:
                 last_error = error
 
         raise StructuredOutputError(
             "AI 응답을 정해진 형식으로 변환하지 못했습니다."
         ) from last_error
+
+    @classmethod
+    def _normalize_not_found(
+        cls,
+        response: TicketGuideResponse,
+    ) -> TicketGuideResponse:
+        if response.summary.strip() != cls.NOT_FOUND_MESSAGE:
+            return response
+        return TicketGuideResponse(
+            summary=cls.NOT_FOUND_MESSAGE,
+            schedule=[],
+            requirements=[],
+            ticket_info=[],
+            warnings=[],
+            sources=[],
+        )
 
     @staticmethod
     def _format_analysis(analysis: QueryAnalysis) -> str:
@@ -118,8 +138,28 @@ class TicketGuideChain:
                 item[0],
             ),
         )
+        html_documents = [item for item in ordered_documents if item[1].metadata.get("source_type") == "html"]
+        other_documents = [item for item in ordered_documents if item[1].metadata.get("source_type") != "html"]
+
+        groups: list[str] = []
+        if html_documents:
+            groups.append(
+                "[AUTHORITATIVE HTML DOCUMENTS]\n"
+                + TicketGuideChain._format_document_group(html_documents)
+            )
+        if other_documents:
+            groups.append(
+                "[SUPPLEMENTAL OCR DOCUMENTS]\n"
+                + TicketGuideChain._format_document_group(other_documents)
+            )
+        return "\n\n".join(groups)
+
+    @staticmethod
+    def _format_document_group(
+        documents: Sequence[tuple[int, Document]],
+    ) -> str:
         formatted: list[str] = []
-        for display_index, (_, document) in enumerate(ordered_documents, 1):
+        for display_index, (_, document) in enumerate(documents, 1):
             metadata = document.metadata
             formatted.append(
                 "\n".join(

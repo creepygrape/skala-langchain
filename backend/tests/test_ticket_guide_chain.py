@@ -142,10 +142,11 @@ def test_prompt_contains_grounding_and_ocr_rules() -> None:
 
     rendered = prompt_text(recording)
     assert "REFERENCE DOCUMENTS만" in rendered
-    assert "문서에 없는 정보는 추측하지 말고" in rendered
     assert "날짜, 시간, 가격, 정책과 OCR 문자를 임의로 수정" in rendered
-    assert "source_type이 html인 문서를 우선" in rendered
-    assert "사용자 질문 및 조건과 직접 관련 없는 정보는 최소화" in rendered
+    assert "HTML 값만 사용하고 OCR 값은 답변에서 제외" in rendered
+    assert "SUPPLEMENTAL OCR DOCUMENTS는 HTML 문서에 없는 정보" in rendered
+    assert "직접 답하는 정보만" in rendered
+    assert "summary를 정확히 \"예매 페이지에서 확인할 수 없습니다.\"" in rendered
 
 
 def test_empty_documents_return_message_without_llm_call() -> None:
@@ -216,3 +217,31 @@ def test_structured_output_fails_after_one_retry() -> None:
         )
 
     assert len(recording.prompts) == 2
+
+
+def test_not_found_response_discards_unrelated_generated_details() -> None:
+    generated = TicketGuideResponse(
+        summary=TicketGuideChain.NOT_FOUND_MESSAGE,
+        schedule=["관련 없는 공연 일정"],
+        requirements=["관련 없는 준비사항"],
+        ticket_info=["관련 없는 가격"],
+        warnings=["관련 없는 주의사항"],
+        sources=["https://example.com/concert"],
+    )
+    recording = RecordingLlm(generated)
+    chain = TicketGuideChain(llm=recording)
+
+    result = chain.answer(
+        question="팬클럽 회원이면 굿즈를 무료로 줘?",
+        analysis=QueryAnalysis(search_query="팬클럽 굿즈 무료"),
+        documents=make_documents(),
+    )
+
+    assert result == TicketGuideResponse(
+        summary=TicketGuideChain.NOT_FOUND_MESSAGE,
+        schedule=[],
+        requirements=[],
+        ticket_info=[],
+        warnings=[],
+        sources=[],
+    )
