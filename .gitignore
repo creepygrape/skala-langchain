@@ -47,3 +47,6 @@ ocr_output/
 # OS metadata
 .DS_Store
 Thumbs.db
+
+# 추가
+example.ipynb
