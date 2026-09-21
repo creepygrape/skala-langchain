@@ -513,14 +513,17 @@ unknown
 
 단순히 문자를 일정 길이마다 자르지 않고 가능한 한 하나의 안내 사항을 함께 유지한다.
 
-초기 설정 후보:
+MVP 설정:
 
 ```text
-chunk_size: 800~1200
-chunk_overlap: 100~200
+Text Splitter: RecursiveCharacterTextSplitter
+chunk_size: 1000
+chunk_overlap: 150
 ```
 
-최종 값은 실제 문서를 이용한 Retrieval 테스트 후 결정한다.
+문단과 줄 경계를 문자 경계보다 우선하여 분할하고, 각 Chunk에는 원본 Document의 metadata를 유지한다.
+
+실제 `26012624` 공연의 HTML 및 OCR 문서로 검증한 결과 최대 Chunk 길이는 991자였으며, 팬클럽 인증·선예매·일반예매·배송·현장수령·본인확인 안내가 관련 Chunk에 유지됐다.
 
 ---
 

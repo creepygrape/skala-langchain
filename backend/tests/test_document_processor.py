@@ -94,3 +94,63 @@ def test_build_documents_keeps_html_when_image_ocr_is_missing() -> None:
     assert documents[0].page_content == HTML_TEXT
     assert documents[0].metadata["source_type"] == "html"
     assert documents[0].metadata["section"] == "unknown"
+
+
+def test_split_documents_uses_configured_size_and_preserves_metadata() -> None:
+    document = Document(
+        page_content="\n".join(f"공연 안내 문장 {index}" for index in range(120)),
+        metadata={
+            "concert_id": "26012624",
+            "source_type": "html",
+            "source_url": PAGE_URL,
+            "section": "notice",
+        },
+    )
+
+    chunks = DocumentProcessor(chunk_size=200, chunk_overlap=30).split_documents(
+        [document]
+    )
+
+    assert len(chunks) > 1
+    assert all(len(chunk.page_content) <= 200 for chunk in chunks)
+    assert all(chunk.metadata == document.metadata for chunk in chunks)
+
+
+def test_split_documents_keeps_related_notice_lines_together() -> None:
+    fanclub_notice = """[팬클럽 인증 안내]
+- 인증 기간: 9월 8일부터 9월 17일까지
+- 인증 대상: My Day 6기 회원
+- 인증 방법: 본인 명의 계정으로 인증
+※ 인증 기간 이후에는 인증할 수 없습니다."""
+    other_notice = "\n\n[기타 안내]\n" + "별도 안내입니다. " * 100
+    document = Document(
+        page_content=fanclub_notice + other_notice,
+        metadata={
+            "concert_id": "26012624",
+            "source_type": "image",
+            "source_url": IMAGE_URL_1,
+            "section": "fanclub_verification",
+        },
+    )
+
+    chunks = DocumentProcessor().split_documents([document])
+
+    assert any(fanclub_notice in chunk.page_content for chunk in chunks)
+
+
+def test_split_documents_keeps_html_before_image_chunks() -> None:
+    page = NolTicketPage(
+        concert_id="26012624",
+        source_url=PAGE_URL,
+        text="HTML 공연 정보 " * 120,
+        image_urls=(IMAGE_URL_1,),
+    )
+    processor = DocumentProcessor(chunk_size=200, chunk_overlap=30)
+    documents = processor.build_documents(page, {IMAGE_URL_1: "OCR 상세 공지 " * 120})
+
+    chunks = processor.split_documents(documents)
+    source_types = [chunk.metadata["source_type"] for chunk in chunks]
+
+    first_image_index = source_types.index("image")
+    assert all(source_type == "html" for source_type in source_types[:first_image_index])
+    assert all(source_type == "image" for source_type in source_types[first_image_index:])

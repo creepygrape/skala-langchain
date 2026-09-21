@@ -3,12 +3,29 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from app.loaders import NolTicketPage
 
 
 class DocumentProcessor:
     """Convert collected HTML and OCR text into LangChain documents."""
+
+    DEFAULT_CHUNK_SIZE = 1000
+    DEFAULT_CHUNK_OVERLAP = 150
+
+    def __init__(
+        self,
+        *,
+        chunk_size: int = DEFAULT_CHUNK_SIZE,
+        chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
+    ) -> None:
+        self._splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            separators=["\n\n", "\n[", "\n※", "\n- ", "\n", ". ", " ", ""],
+            keep_separator="start",
+        )
 
     @staticmethod
     def create_html_document(
@@ -73,3 +90,7 @@ class DocumentProcessor:
             )
 
         return documents
+
+    def split_documents(self, documents: list[Document]) -> list[Document]:
+        """Split documents while preserving their source metadata."""
+        return self._splitter.split_documents(documents)

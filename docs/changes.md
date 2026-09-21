@@ -45,4 +45,24 @@
 
 ## Changes
 
-아직 변경사항 없음.
+### 2026-09-21 — Text Splitter 설정 확정
+
+**기존**
+- `chunk_size` 후보: 800~1200
+- `chunk_overlap` 후보: 100~200
+- 실제 공지를 이용한 검증 후 최종값 결정 예정
+
+**변경**
+- `RecursiveCharacterTextSplitter` 사용
+- `chunk_size`: 1000
+- `chunk_overlap`: 150
+- 문단과 줄 경계를 우선하는 separator 적용
+- 분할된 Chunk에 원본 metadata 유지
+
+**이유**
+- `26012624` 공연의 HTML 5,113자와 OCR 6,993자를 분할한 결과 21개 Chunk가 생성됐으며 최대 길이는 991자였음
+- 팬클럽 인증, 선예매, 일반예매, 배송, 현장수령, 본인확인, 티켓 수령 안내가 관련 Chunk에 유지됨
+
+**영향**
+- `docs/architecture.md` Text Splitter 설정
+- `backend/app/rag/document_processor.py` 문서 분할 로직
