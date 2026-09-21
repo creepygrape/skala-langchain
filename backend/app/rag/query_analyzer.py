@@ -23,6 +23,10 @@ QueryTopic = Literal[
 ]
 
 
+class QueryAnalysisError(RuntimeError):
+    """Raised when a compound question cannot be analyzed."""
+
+
 class QueryAnalysis(BaseModel):
     """Structured user conditions used to improve document retrieval."""
 
@@ -85,10 +89,13 @@ search_query에는 원문 질문의 의미를 유지하면서 검색에 유용�
 
         llm = self._llm or ChatOpenAI(model=self.DEFAULT_MODEL, temperature=0)
         chain = self._PROMPT | llm.with_structured_output(QueryAnalysis)
-        result = chain.invoke({"question": normalized})
-        if isinstance(result, QueryAnalysis):
-            return result
-        return QueryAnalysis.model_validate(result)
+        try:
+            result = chain.invoke({"question": normalized})
+            if isinstance(result, QueryAnalysis):
+                return result
+            return QueryAnalysis.model_validate(result)
+        except Exception as error:
+            raise QueryAnalysisError("사용자 질문을 분석하지 못했습니다.") from error
 
     @staticmethod
     def build_search_query(

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from langchain_core.documents import Document
 
+from app.extractors import OcrProcessingError
 from app.loaders import NolTicketPage
 from app.models import TicketGuideResponse
 from app.rag import QueryAnalysis
@@ -13,6 +15,7 @@ from app.services import TicketGuideService
 class FakeLoader:
     def __init__(self) -> None:
         self.loaded_urls: list[str] = []
+        self.image_urls = ("https://example.com/notice.jpg",)
 
     def extract_concert_id(self, url: str) -> str:
         return url.rsplit("/", 1)[-1]
@@ -23,16 +26,19 @@ class FakeLoader:
             concert_id="26012624",
             source_url=url,
             text="공연 HTML 안내",
-            image_urls=("https://example.com/notice.jpg",),
+            image_urls=self.image_urls,
         )
 
 
 class FakeExtractor:
     def __init__(self) -> None:
         self.urls: list[str] = []
+        self.error: Exception | None = None
 
     def extract(self, image_url: str) -> str:
         self.urls.append(image_url)
+        if self.error is not None:
+            raise self.error
         return "상세 이미지 OCR 안내"
 
 
@@ -175,16 +181,41 @@ def test_guide_reuses_existing_index_without_ingestion() -> None:
 def test_empty_question_is_rejected_before_ingestion() -> None:
     service, parts = make_service(exists=False)
 
-    try:
+    with pytest.raises(ValueError, match="사용자 질문을 입력해주세요"):
         service.guide(
             url="https://nol.yanolja.com/ticket/products/26012624",
             question="   ",
         )
-    except ValueError as error:
-        assert str(error) == "사용자 질문을 입력해주세요."
-    else:
-        raise AssertionError("빈 질문은 거부되어야 합니다.")
 
     assert parts["loader"].loaded_urls == []
     assert parts["extractor"].urls == []
     assert parts["store"].index_calls == []
+
+
+def test_missing_detail_image_uses_html_and_adds_warning() -> None:
+    service, parts = make_service(exists=False)
+    parts["loader"].image_urls = ()
+
+    result = service.guide(
+        url="https://nol.yanolja.com/ticket/products/26012624",
+        question="공연 시간이 언제야?",
+    )
+
+    assert parts["extractor"].urls == []
+    assert parts["processor"].built_with[1] == {}
+    assert TicketGuideService.NO_IMAGE_WARNING in result.warnings
+    assert parts["store"].index_calls
+
+
+def test_ocr_failure_uses_html_and_adds_persistent_warning() -> None:
+    service, parts = make_service(exists=False)
+    parts["extractor"].error = OcrProcessingError("OCR failed")
+    url = "https://nol.yanolja.com/ticket/products/26012624"
+
+    first = service.guide(url=url, question="공연 시간이 언제야?")
+    second = service.guide(url=url, question="배송은 언제야?")
+
+    assert parts["processor"].built_with[1] == {}
+    assert first.warnings.count(TicketGuideService.OCR_WARNING) == 1
+    assert second.warnings.count(TicketGuideService.OCR_WARNING) == 1
+    assert len(parts["store"].index_calls) == 1

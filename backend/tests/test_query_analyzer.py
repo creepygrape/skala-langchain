@@ -5,7 +5,7 @@ from typing import Any
 import pytest
 from langchain_core.runnables import RunnableLambda
 
-from app.rag import QueryAnalysis, QueryAnalyzer
+from app.rag import QueryAnalysis, QueryAnalysisError, QueryAnalyzer
 
 
 class FakeStructuredLlm:
@@ -107,3 +107,17 @@ def test_empty_question_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="사용자 질문을 입력해주세요"):
         analyzer.analyze("  ")
+
+
+def test_compound_question_wraps_llm_failure() -> None:
+    class FailingLlm:
+        def with_structured_output(self, schema: Any) -> RunnableLambda:
+            def fail(prompt: Any) -> QueryAnalysis:
+                raise RuntimeError("LLM unavailable")
+
+            return RunnableLambda(fail)
+
+    analyzer = QueryAnalyzer(llm=FailingLlm())
+
+    with pytest.raises(QueryAnalysisError, match="사용자 질문을 분석하지 못했습니다"):
+        analyzer.analyze("배송받고 취소도 하고 싶어")

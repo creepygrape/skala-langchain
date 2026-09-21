@@ -44,6 +44,15 @@ def test_default_ocr_uses_required_korean_v5_configuration() -> None:
     )
 
 
+def test_default_ocr_wraps_initialization_failure() -> None:
+    with patch(
+        "app.extractors.image_text.PaddleOCR",
+        side_effect=RuntimeError("model unavailable"),
+    ):
+        with pytest.raises(OcrProcessingError):
+            ImageTextExtractor(session=make_session())
+
+
 def test_extract_downloads_image_and_returns_recognized_lines() -> None:
     session = make_session()
     result = Mock()

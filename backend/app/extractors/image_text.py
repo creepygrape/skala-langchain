@@ -43,13 +43,18 @@ class ImageTextExtractor:
         timeout: float = 30.0,
     ) -> None:
         self._session = session or requests.Session()
-        self._ocr = ocr or PaddleOCR(
-            lang="korean",
-            ocr_version="PP-OCRv5",
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=False,
-        )
+        try:
+            self._ocr = ocr or PaddleOCR(
+                lang="korean",
+                ocr_version="PP-OCRv5",
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=False,
+            )
+        except Exception as error:
+            raise OcrProcessingError(
+                "상세 공지 이미지 분석을 준비하지 못했습니다."
+            ) from error
         self._timeout = timeout
 
     def extract(self, image_url: str) -> str:
