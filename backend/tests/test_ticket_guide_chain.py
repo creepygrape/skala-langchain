@@ -2,23 +2,45 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 
-from app.chains import TicketGuideChain
+from app.chains import StructuredOutputError, TicketGuideChain
+from app.models import TicketGuideResponse
 from app.rag import QueryAnalysis
 
 
 class RecordingLlm:
-    def __init__(self, answer: str = "근거 기반 답변") -> None:
-        self.answer = answer
+    def __init__(self, *results: TicketGuideResponse | Exception) -> None:
+        self.results = list(results) or [make_response()]
         self.prompts: list[Any] = []
-        self.runnable = RunnableLambda(self._invoke)
+        self.schema: type[TicketGuideResponse] | None = None
 
-    def _invoke(self, prompt: Any) -> AIMessage:
+    def with_structured_output(
+        self,
+        schema: type[TicketGuideResponse],
+    ) -> RunnableLambda:
+        self.schema = schema
+        return RunnableLambda(self._invoke)
+
+    def _invoke(self, prompt: Any) -> TicketGuideResponse:
         self.prompts.append(prompt)
-        return AIMessage(content=self.answer)
+        result = self.results.pop(0)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+
+def make_response() -> TicketGuideResponse:
+    return TicketGuideResponse(
+        summary="실물 신분증과 예매내역서를 준비하세요.",
+        schedule=[],
+        requirements=["실물 신분증", "예매내역서"],
+        ticket_info=["현장 수령"],
+        warnings=[],
+        sources=["https://example.com/concert"],
+    )
 
 
 def make_analysis() -> QueryAnalysis:
@@ -63,8 +85,9 @@ def prompt_text(llm: RecordingLlm) -> str:
 
 
 def test_answer_passes_question_analysis_and_documents_to_llm() -> None:
-    recording = RecordingLlm("실물 신분증과 예매내역서를 준비하세요.")
-    chain = TicketGuideChain(llm=recording.runnable)
+    expected = make_response()
+    recording = RecordingLlm(expected)
+    chain = TicketGuideChain(llm=recording)
 
     result = chain.answer(
         question="일반예매 후 현장에서 받을 때 뭘 준비해야 해?",
@@ -73,7 +96,8 @@ def test_answer_passes_question_analysis_and_documents_to_llm() -> None:
     )
 
     rendered = prompt_text(recording)
-    assert result == "실물 신분증과 예매내역서를 준비하세요."
+    assert result == expected
+    assert recording.schema is TicketGuideResponse
     assert "일반예매 후 현장에서 받을 때 뭘 준비해야 해?" in rendered
     assert "booking_type: general_sale" in rendered
     assert "ticket_delivery: onsite" in rendered
@@ -83,7 +107,7 @@ def test_answer_passes_question_analysis_and_documents_to_llm() -> None:
 
 def test_answer_preserves_ocr_text_and_source_metadata() -> None:
     recording = RecordingLlm()
-    chain = TicketGuideChain(llm=recording.runnable)
+    chain = TicketGuideChain(llm=recording)
 
     chain.answer(
         question="현장수령 시간은 언제야?",
@@ -108,7 +132,7 @@ def test_html_context_is_placed_before_image_context() -> None:
 
 def test_prompt_contains_grounding_and_ocr_rules() -> None:
     recording = RecordingLlm()
-    chain = TicketGuideChain(llm=recording.runnable)
+    chain = TicketGuideChain(llm=recording)
 
     chain.answer(
         question="배송은 언제야?",
@@ -126,7 +150,7 @@ def test_prompt_contains_grounding_and_ocr_rules() -> None:
 
 def test_empty_documents_return_message_without_llm_call() -> None:
     recording = RecordingLlm()
-    chain = TicketGuideChain(llm=recording.runnable)
+    chain = TicketGuideChain(llm=recording)
 
     result = chain.answer(
         question="없는 정보를 알려줘",
@@ -134,23 +158,61 @@ def test_empty_documents_return_message_without_llm_call() -> None:
         documents=[],
     )
 
-    assert result == TicketGuideChain.NO_CONTEXT_MESSAGE
+    assert result == TicketGuideResponse(
+        summary=TicketGuideChain.NO_CONTEXT_MESSAGE,
+        schedule=[],
+        requirements=[],
+        ticket_info=[],
+        warnings=[],
+        sources=[],
+    )
     assert recording.prompts == []
 
 
 def test_empty_question_is_rejected_without_llm_call() -> None:
     recording = RecordingLlm()
-    chain = TicketGuideChain(llm=recording.runnable)
+    chain = TicketGuideChain(llm=recording)
 
-    try:
+    with pytest.raises(ValueError, match="사용자 질문을 입력해주세요"):
         chain.answer(
             question="   ",
             analysis=QueryAnalysis(search_query="질문"),
             documents=make_documents(),
         )
-    except ValueError as error:
-        assert str(error) == "사용자 질문을 입력해주세요."
-    else:
-        raise AssertionError("빈 질문은 거부되어야 합니다.")
 
     assert recording.prompts == []
+
+
+def test_structured_output_failure_is_retried_once() -> None:
+    expected = make_response()
+    recording = RecordingLlm(ValueError("invalid output"), expected)
+    chain = TicketGuideChain(llm=recording)
+
+    result = chain.answer(
+        question="현장수령 준비물이 뭐야?",
+        analysis=make_analysis(),
+        documents=make_documents(),
+    )
+
+    assert result == expected
+    assert len(recording.prompts) == 2
+
+
+def test_structured_output_fails_after_one_retry() -> None:
+    recording = RecordingLlm(
+        ValueError("first invalid output"),
+        ValueError("second invalid output"),
+    )
+    chain = TicketGuideChain(llm=recording)
+
+    with pytest.raises(
+        StructuredOutputError,
+        match="AI 응답을 정해진 형식으로 변환하지 못했습니다",
+    ):
+        chain.answer(
+            question="현장수령 준비물이 뭐야?",
+            analysis=make_analysis(),
+            documents=make_documents(),
+        )
+
+    assert len(recording.prompts) == 2

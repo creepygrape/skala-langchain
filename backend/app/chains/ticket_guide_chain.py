@@ -4,11 +4,15 @@ from collections.abc import Sequence
 from typing import Any
 
 from langchain_core.documents import Document
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
+from app.models import TicketGuideResponse
 from app.rag import QueryAnalysis
+
+
+class StructuredOutputError(RuntimeError):
+    """Raised when the answer cannot be parsed after one retry."""
 
 
 class TicketGuideChain:
@@ -29,7 +33,8 @@ class TicketGuideChain:
 - HTML과 OCR 내용이 충돌하면 source_type이 html인 문서를 우선한다.
 - 사용자 질문 및 조건과 직접 관련 없는 정보는 최소화한다.
 - 중요한 제한사항과 준비사항은 생략하지 않는다.
-- 예매 성공을 보장하지 않는다.""",
+- 예매 성공을 보장하지 않는다.
+- sources에는 답변 작성에 실제 사용한 문서의 source_url만 넣는다.""",
             ),
             (
                 "human",
@@ -42,7 +47,7 @@ class TicketGuideChain:
 [REFERENCE DOCUMENTS]
 {reference_documents}
 
-위 자료만 근거로 사용자에게 필요한 내용을 한국어로 안내해줘.""",
+위 자료만 근거로 사용자에게 필요한 내용을 한국어로 구조화해줘.""",
             ),
         ]
     )
@@ -56,23 +61,42 @@ class TicketGuideChain:
         question: str,
         analysis: QueryAnalysis,
         documents: Sequence[Document],
-    ) -> str:
+    ) -> TicketGuideResponse:
         """Invoke the answer model with the question, conditions, and context."""
         normalized_question = question.strip()
         if not normalized_question:
             raise ValueError("사용자 질문을 입력해주세요.")
         if not documents:
-            return self.NO_CONTEXT_MESSAGE
+            return TicketGuideResponse(
+                summary=self.NO_CONTEXT_MESSAGE,
+                schedule=[],
+                requirements=[],
+                ticket_info=[],
+                warnings=[],
+                sources=[],
+            )
 
         llm = self._llm or ChatOpenAI(model=self.DEFAULT_MODEL, temperature=0)
-        chain = self._PROMPT | llm | StrOutputParser()
-        return chain.invoke(
-            {
-                "question": normalized_question,
-                "user_context": self._format_analysis(analysis),
-                "reference_documents": self._format_documents(documents),
-            }
-        )
+        chain = self._PROMPT | llm.with_structured_output(TicketGuideResponse)
+        chain_input = {
+            "question": normalized_question,
+            "user_context": self._format_analysis(analysis),
+            "reference_documents": self._format_documents(documents),
+        }
+
+        last_error: Exception | None = None
+        for _ in range(2):
+            try:
+                result = chain.invoke(chain_input)
+                if isinstance(result, TicketGuideResponse):
+                    return result
+                return TicketGuideResponse.model_validate(result)
+            except Exception as error:
+                last_error = error
+
+        raise StructuredOutputError(
+            "AI 응답을 정해진 형식으로 변환하지 못했습니다."
+        ) from last_error
 
     @staticmethod
     def _format_analysis(analysis: QueryAnalysis) -> str:
