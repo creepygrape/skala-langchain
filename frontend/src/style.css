@@ -1,0 +1,51 @@
+:root {
+  font-family: Inter, Pretendard, system-ui, sans-serif;
+  color: #1f2937;
+  background: #f3f4f6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+button {
+  padding: 0.45rem 0.75rem;
+  border: 0;
+  border-radius: 0.4rem;
+  color: white;
+  background: #374151;
+  cursor: pointer;
+}
+
+.container {
+  width: min(90%, 42rem);
+  margin: 0 auto;
+  padding-top: 20vh;
+}
+
+.container h1 {
+  margin-bottom: 0.5rem;
+}
+
+.health-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.75rem;
+  background: white;
+  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 8%);
+}
+
+.health-card strong {
+  color: #047857;
+}
+
+.health-card .error {
+  color: #b91c1c;
+}

@@ -30,6 +30,11 @@ build/
 dist/
 *.egg-info/
 
+# Frontend dependencies and tooling
+node_modules/
+.vite/
+npm-debug.log*
+
 # Generated OCR output
 ocr_output/
 
