@@ -535,6 +535,8 @@ chunk_overlap: 150
 
 문자열이 정확히 일치하지 않아도 의미적으로 비슷한 내용을 검색할 수 있도록 한다.
 
+MVP에서는 OpenAI `text-embedding-3-small` 모델을 사용한다.
+
 ### Chroma
 
 Embedding된 콘서트 공지 Chunk를 저장하고 검색한다.
@@ -548,6 +550,8 @@ concert_id = 26012624
 ```
 
 질문 시 해당 공연의 Chunk만 대상으로 Retrieval한다.
+
+MVP Vector Store는 프로세스 메모리에서 동작한다. 동일한 `concert_id`의 Chunk가 이미 존재하면 Ingestion과 Embedding을 다시 수행하지 않도록 존재 여부를 먼저 확인한다.
 
 ---
 

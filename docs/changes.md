@@ -66,3 +66,25 @@
 **영향**
 - `docs/architecture.md` Text Splitter 설정
 - `backend/app/rag/document_processor.py` 문서 분할 로직
+
+### 2026-09-21 — Embedding 모델 및 Vector Store 구성 확정
+
+**기존**
+- OpenAI Embedding과 Chroma 사용
+- 구체적인 Embedding 모델과 Chroma 저장 방식은 미정
+
+**변경**
+- Embedding 모델: `text-embedding-3-small`
+- Vector Store: 프로세스 메모리에서 동작하는 Chroma
+- `concert_id` metadata를 기준으로 공연별 저장 여부 확인
+- 이미 저장된 공연은 Document 추가와 Embedding을 생략
+
+**이유**
+- MVP에서는 영구 저장이 필수가 아니므로 별도 저장소 설정 없이 인메모리 Chroma로 기능 검증 가능
+- OpenAI 공식 문서에서 `text-embedding-3-small`을 기본 소형 Embedding 모델로 제공함
+- 실제 OpenAI Embedding 및 Chroma 저장 검증에서 공연별 존재 확인과 중복 저장 방지가 정상 동작함
+
+**영향**
+- `docs/architecture.md` Embedding / Chroma 설정
+- `backend/app/rag/vector_store.py` Vector Store 관리
+- `backend/requirements.txt` LangChain OpenAI / Chroma 통합 패키지
