@@ -78,8 +78,8 @@ npm run dev
 
 #### 질문 입력
 
-![NOL Ticket URL과 질문 입력 화면](exec/질문.png)
+![NOL Ticket URL과 질문 입력 화면](exec/question.png)
 
 #### 맞춤형 예매 안내 결과
 
-![맞춤형 예매 안내 결과 화면](exec/답변.png)
+![맞춤형 예매 안내 결과 화면](exec/answer.png)
